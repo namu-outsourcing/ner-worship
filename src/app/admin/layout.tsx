@@ -16,6 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .single()
 
   const isAdmin = ['division_leader', 'team_leader', 'secretary'].includes(profile?.role || '')
+  const canAccessMembers = ['division_leader', 'team_leader'].includes(profile?.role || '')
 
   if (!isAdmin) redirect('/')
 
@@ -33,9 +34,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/teams" className="flex items-center gap-3 p-3 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors">
             <Users2 className="w-4 h-4" /> 팀 관리
           </Link>
-          <Link href="/admin/members" className="flex items-center gap-3 p-3 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors">
-            <Users className="w-4 h-4" /> 팀원 관리
-          </Link>
+          {canAccessMembers && (
+            <Link href="/admin/members" className="flex items-center gap-3 p-3 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors">
+              <Users className="w-4 h-4" /> 팀원 관리
+            </Link>
+          )}
           <Link href="/admin/services" className="flex items-center gap-3 p-3 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors">
             <Calendar className="w-4 h-4" /> 예배 스케줄 관리
           </Link>

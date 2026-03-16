@@ -121,6 +121,23 @@ export default function ServicesAdminPage() {
     return new Map(teams.map((team) => [team.id, team]))
   }, [teams])
 
+  const serviceById = useMemo(() => {
+    return new Map(services.map((service) => [service.id, service]))
+  }, [services])
+
+  const buildDuplicateMessage = (duplicated: AssignmentRow) => {
+    const duplicatedService = serviceById.get(duplicated.service_id)
+    const duplicatedTeam = teamById.get(duplicated.team_id)
+    const dateLabel =
+      duplicatedService?.date && !Number.isNaN(parseISO(duplicatedService.date).getTime())
+        ? format(parseISO(duplicatedService.date), 'M월 d일 (EEE)', { locale: ko })
+        : '날짜 미확인'
+    const titleLabel = duplicatedService?.title || '제목 미확인 예배'
+    const teamLabel = duplicatedTeam?.name || '팀 미확인'
+
+    return `이미 배정됨: ${dateLabel} · ${titleLabel} · ${teamLabel}`
+  }
+
   const servicesInMonth = useMemo(() => {
     return services
       .filter((service) => isSameMonth(parseISO(service.date), currentMonth))
@@ -239,7 +256,7 @@ export default function ServicesAdminPage() {
     )
 
     if (duplicated) {
-      toast.warning('해당 팀원은 이미 이 예배에 배정되어 있습니다.')
+      toast.warning(buildDuplicateMessage(duplicated))
       return
     }
 
@@ -278,7 +295,7 @@ export default function ServicesAdminPage() {
     )
 
     if (duplicated) {
-      toast.warning('같은 예배에 중복 배정할 수 없습니다.')
+      toast.warning(buildDuplicateMessage(duplicated))
       return
     }
 

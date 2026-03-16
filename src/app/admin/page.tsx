@@ -33,6 +33,7 @@ interface AssignmentRow {
 interface ProfileRef {
   id: string
   full_name: string
+  birthday: string | null
 }
 
 interface AssignmentDisplay {
@@ -63,7 +64,7 @@ export default function AdminPage() {
       const [servicesRes, teamsRes, profilesRes, assignmentsRes] = await Promise.all([
         supabase.from('services').select('id, title, date, status').order('date', { ascending: false }),
         supabase.from('teams').select('id, name').order('name', { ascending: true }),
-        supabase.from('profiles').select('id, full_name').order('full_name', { ascending: true }),
+        supabase.from('profiles').select('id, full_name, birthday').order('full_name', { ascending: true }),
         supabase.from('assignments').select('id, service_id, team_id, profile_id, role_name'),
       ])
 
@@ -144,6 +145,30 @@ export default function AdminPage() {
     return grouped
   }, [servicesInMonth])
 
+  const birthdaysByDay = useMemo(() => {
+    const grouped = new Map<number, ProfileRef[]>()
+    const monthIndex = currentMonth.getMonth()
+
+    profiles.forEach((profile) => {
+      if (!profile.birthday) return
+      const birthdayDate = parseISO(profile.birthday)
+      if (Number.isNaN(birthdayDate.getTime())) return
+      if (birthdayDate.getMonth() !== monthIndex) return
+
+      const day = birthdayDate.getDate()
+      const list = grouped.get(day) || []
+      list.push(profile)
+      grouped.set(day, list)
+    })
+
+    for (const [day, list] of grouped.entries()) {
+      list.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ko'))
+      grouped.set(day, list)
+    }
+
+    return grouped
+  }, [currentMonth, profiles])
+
   const calendarCells = useMemo(() => {
     const monthStart = startOfMonth(currentMonth)
     const monthEnd = endOfMonth(currentMonth)
@@ -205,6 +230,12 @@ export default function AdminPage() {
                   <>
                     <p className="mb-1 text-xs font-semibold text-slate-600">{day}일</p>
                     <div className="space-y-1">
+                      {(birthdaysByDay.get(day) || []).map((profile) => (
+                        <div key={`birthday-${profile.id}`} className="rounded border border-pink-200 bg-pink-50 px-2 py-1 text-[11px] text-pink-700">
+                          🎂 {profile.full_name}
+                        </div>
+                      ))}
+
                       {(servicesByDay.get(day) || []).map((service) => {
                         const serviceAssignments = assignmentsByServiceId.get(service.id) || []
                         const assignedTeams = new Set(serviceAssignments.map((assignment) => assignment.team_id)).size
