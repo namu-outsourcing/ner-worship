@@ -169,6 +169,10 @@ export default function AdminPage() {
     return grouped
   }, [currentMonth, profiles])
 
+  const birthdayDays = useMemo(() => {
+    return [...birthdaysByDay.keys()].sort((a, b) => a - b)
+  }, [birthdaysByDay])
+
   const calendarCells = useMemo(() => {
     const monthStart = startOfMonth(currentMonth)
     const monthEnd = endOfMonth(currentMonth)
@@ -192,13 +196,13 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">대시보드</h1>
-        <div className="inline-flex items-center gap-1 rounded-lg border bg-white p-1">
+        <div className="inline-flex w-full items-center justify-between gap-1 rounded-lg border bg-white p-1 sm:w-auto sm:justify-start">
           <Button type="button" variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))}>
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <span className="min-w-28 text-center text-sm font-semibold">
+          <span className="flex-1 text-center text-sm font-semibold sm:min-w-28 sm:flex-none">
             {format(currentMonth, 'yyyy년 M월', { locale: ko })}
           </span>
           <Button type="button" variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
@@ -207,12 +211,75 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <Card>
+      <div className="space-y-4 md:hidden">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">월간 일정 피드</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {servicesInMonth.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-slate-400">
+                이번 달 예배 일정이 없습니다.
+              </div>
+            ) : (
+              servicesInMonth.map((service) => {
+                const serviceAssignments = assignmentsByServiceId.get(service.id) || []
+                const assignedTeams = new Set(serviceAssignments.map((assignment) => assignment.team_id)).size
+                const unassignedTeams = Math.max(teams.length - assignedTeams, 0)
+                return (
+                  <Link
+                    key={service.id}
+                    href={`/admin/services/${service.id}`}
+                    className="block rounded-xl border bg-white p-3 shadow-sm"
+                  >
+                    <p className="text-xs font-semibold text-slate-500">
+                      {format(parseISO(service.date), 'M월 d일 (EEE)', { locale: ko })}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold">{service.title}</p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700">
+                        {assignedTeams}/{teams.length}팀 배정
+                      </span>
+                      {unassignedTeams > 0 && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
+                          미배정 {unassignedTeams}팀
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                )
+              })
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">이달 생일</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {birthdayDays.length === 0 ? (
+              <p className="text-sm text-slate-400">등록된 생일이 없습니다.</p>
+            ) : (
+              birthdayDays.map((day) => (
+                <div key={day} className="rounded-lg border border-pink-200 bg-pink-50 px-3 py-2">
+                  <p className="text-xs font-semibold text-pink-700">{day}일</p>
+                  <p className="mt-1 text-sm text-pink-900">
+                    {(birthdaysByDay.get(day) || []).map((profile) => profile.full_name).join(', ')}
+                  </p>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="hidden md:block">
         <CardHeader>
           <CardTitle className="text-base">월간 캘린더</CardTitle>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="grid grid-cols-7 gap-2 mb-2">
+          <div className="mb-2 grid grid-cols-7 gap-2">
             {weekDays.map((day) => (
               <div key={day} className="py-2 text-center text-xs font-semibold text-slate-500">
                 {day}
@@ -224,7 +291,7 @@ export default function AdminPage() {
             {calendarCells.map((day, index) => (
               <div
                 key={`${day ?? 'empty'}-${index}`}
-                className={`min-h-28 rounded-lg border p-2 ${day ? 'bg-white' : 'bg-slate-50 border-dashed'}`}
+                className={`min-h-28 rounded-lg border p-2 ${day ? 'bg-white' : 'border-dashed bg-slate-50'}`}
               >
                 {day && (
                   <>
@@ -278,53 +345,88 @@ export default function AdminPage() {
           {servicesInMonth.length === 0 ? (
             <div className="py-16 text-center text-slate-400">이번 달 예배 일정이 없습니다.</div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border bg-white">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b bg-slate-50">
-                  <tr>
-                    <th className="w-40 px-4 py-3 text-xs font-semibold uppercase text-slate-500">팀</th>
-                    {servicesInMonth.map((service) => (
-                      <th key={service.id} className="min-w-52 px-4 py-3 align-top">
-                        <Link href={`/admin/services/${service.id}`} className="hover:underline">
-                          <p className="text-xs text-slate-500">{format(parseISO(service.date), 'M/d (EEE)', { locale: ko })}</p>
-                          <p className="mt-1 text-sm font-semibold">{service.title}</p>
-                        </Link>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {teams.map((team) => (
-                    <tr key={team.id} className="border-b align-top last:border-b-0">
-                      <td className="px-4 py-3 font-semibold text-slate-700">{team.name}</td>
+            <>
+              <div className="space-y-3 md:hidden">
+                {teams.map((team) => (
+                  <div key={team.id} className="rounded-lg border bg-white p-3">
+                    <p className="text-sm font-semibold text-slate-800">{team.name}</p>
+                    <div className="mt-2 space-y-2">
                       {servicesInMonth.map((service) => {
                         const key = `${team.id}__${service.id}`
                         const cellAssignments = assignmentsByTeamService.get(key) || []
-
                         return (
-                          <td key={key} className="px-4 py-3">
-                            <Link href={`/admin/services/${service.id}`} className="block rounded-md border p-2 hover:bg-slate-50">
-                              {cellAssignments.length === 0 ? (
-                                <span className="text-xs text-slate-400">미배정</span>
-                              ) : (
-                                <div className="space-y-1">
-                                  {cellAssignments.map((assignment) => (
-                                    <div key={assignment.id} className="text-xs">
-                                      <span className="font-medium">{assignment.profileName}</span>
-                                      <span className="text-slate-500"> · {assignment.role_name}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </Link>
-                          </td>
+                          <Link
+                            key={key}
+                            href={`/admin/services/${service.id}`}
+                            className="block rounded-md border border-slate-200 p-2"
+                          >
+                            <p className="text-xs font-semibold text-slate-500">
+                              {format(parseISO(service.date), 'M/d (EEE)', { locale: ko })}
+                            </p>
+                            <p className="mt-0.5 text-xs font-medium">{service.title}</p>
+                            {cellAssignments.length === 0 ? (
+                              <p className="mt-1 text-[11px] text-slate-400">미배정</p>
+                            ) : (
+                              <p className="mt-1 text-[11px] text-slate-600">
+                                {cellAssignments.map((assignment) => `${assignment.profileName}(${assignment.role_name})`).join(', ')}
+                              </p>
+                            )}
+                          </Link>
                         )
                       })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto rounded-lg border bg-white md:block">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b bg-slate-50">
+                    <tr>
+                      <th className="w-40 px-4 py-3 text-xs font-semibold uppercase text-slate-500">팀</th>
+                      {servicesInMonth.map((service) => (
+                        <th key={service.id} className="min-w-52 px-4 py-3 align-top">
+                          <Link href={`/admin/services/${service.id}`} className="hover:underline">
+                            <p className="text-xs text-slate-500">{format(parseISO(service.date), 'M/d (EEE)', { locale: ko })}</p>
+                            <p className="mt-1 text-sm font-semibold">{service.title}</p>
+                          </Link>
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {teams.map((team) => (
+                      <tr key={team.id} className="border-b align-top last:border-b-0">
+                        <td className="px-4 py-3 font-semibold text-slate-700">{team.name}</td>
+                        {servicesInMonth.map((service) => {
+                          const key = `${team.id}__${service.id}`
+                          const cellAssignments = assignmentsByTeamService.get(key) || []
+
+                          return (
+                            <td key={key} className="px-4 py-3">
+                              <Link href={`/admin/services/${service.id}`} className="block rounded-md border p-2 hover:bg-slate-50">
+                                {cellAssignments.length === 0 ? (
+                                  <span className="text-xs text-slate-400">미배정</span>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {cellAssignments.map((assignment) => (
+                                      <div key={assignment.id} className="text-xs">
+                                        <span className="font-medium">{assignment.profileName}</span>
+                                        <span className="text-slate-500"> · {assignment.role_name}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </Link>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

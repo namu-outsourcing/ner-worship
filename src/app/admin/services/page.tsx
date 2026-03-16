@@ -60,6 +60,7 @@ export default function ServicesAdminPage() {
   const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()))
   const [activeTeamId, setActiveTeamId] = useState('')
   const [dragOverServiceId, setDragOverServiceId] = useState<string | null>(null)
+  const [mobileSelectedMemberId, setMobileSelectedMemberId] = useState('')
 
   useEffect(() => {
     let active = true
@@ -220,6 +221,17 @@ export default function ServicesAdminPage() {
     })
   }, [activeTeamMembers, monthlyCountByProfile])
 
+  useEffect(() => {
+    if (activeTeamMembersSortedByLoad.length === 0) {
+      if (mobileSelectedMemberId) setMobileSelectedMemberId('')
+      return
+    }
+
+    if (!mobileSelectedMemberId || !activeTeamMembersSortedByLoad.some((member) => member.id === mobileSelectedMemberId)) {
+      setMobileSelectedMemberId(activeTeamMembersSortedByLoad[0].id)
+    }
+  }, [activeTeamMembersSortedByLoad, mobileSelectedMemberId])
+
   const handleCreateService = async () => {
     const title = newService.title.trim()
     if (!title || !newService.date) {
@@ -354,6 +366,20 @@ export default function ServicesAdminPage() {
     }
   }
 
+  const handleMobileAssign = async (serviceId: string) => {
+    if (!activeTeamId || !mobileSelectedMemberId) {
+      toast.warning('먼저 팀원 카드를 선택해 주세요.')
+      return
+    }
+
+    setSaveLoading(true)
+    try {
+      await createAssignment(serviceId, activeTeamId, mobileSelectedMemberId)
+    } finally {
+      setSaveLoading(false)
+    }
+  }
+
   const handleDragMember = (event: React.DragEvent<HTMLDivElement>, profileId: string) => {
     const payload: DragPayload = { type: 'member', profileId }
     event.dataTransfer.setData('application/json', JSON.stringify(payload))
@@ -377,31 +403,31 @@ export default function ServicesAdminPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
         <h1 className="text-2xl font-bold">예배 스케줄 관리</h1>
-        <Card className="p-2 border-slate-200">
+        <Card className="w-full border-slate-200 p-2 lg:w-auto">
           <form
             onSubmit={(event) => {
               event.preventDefault()
               void handleCreateService()
             }}
-            className="flex flex-wrap gap-2"
+            className="grid gap-2 sm:grid-cols-[160px_1fr_auto] sm:items-center"
           >
             <Input
               type="date"
               value={newService.date}
               onChange={(event) => setNewService({ ...newService, date: event.target.value })}
-              className="w-40"
+              className="w-full"
               required
             />
             <Input
               placeholder="예배 명칭 (예: 3월 3주차)"
               value={newService.title}
               onChange={(event) => setNewService({ ...newService, title: event.target.value })}
-              className="w-64"
+              className="w-full"
               required
             />
-            <Button type="button" disabled={saveLoading} onClick={() => void handleCreateService()}>
+            <Button type="button" disabled={saveLoading} onClick={() => void handleCreateService()} className="w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-1" /> 생성
             </Button>
           </form>
@@ -416,7 +442,7 @@ export default function ServicesAdminPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {teams.map((team) => (
               <Button
                 key={team.id}
@@ -424,6 +450,7 @@ export default function ServicesAdminPage() {
                 size="sm"
                 variant={activeTeamId === team.id ? 'default' : 'outline'}
                 onClick={() => setActiveTeamId(team.id)}
+                className="shrink-0"
               >
                 {team.name}
               </Button>
@@ -459,7 +486,127 @@ export default function ServicesAdminPage() {
             </div>
           )}
 
-          <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
+          <div className="space-y-4 lg:hidden">
+            <Card>
+              <CardHeader className="pb-3 border-b">
+                <CardTitle className="text-sm font-semibold">모바일 빠른 배정</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-3">
+                {activeTeamMembersSortedByLoad.length === 0 ? (
+                  <p className="text-sm text-slate-500">이 팀에 등록된 팀원이 없습니다.</p>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-500">팀원을 선택한 뒤 일정 카드의 배정 버튼을 누르세요.</p>
+                    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                      {activeTeamMembersSortedByLoad.map((member) => {
+                        const count = monthlyCountByProfile.get(member.id) || 0
+                        const selected = member.id === mobileSelectedMemberId
+                        return (
+                          <button
+                            key={member.id}
+                            type="button"
+                            onClick={() => setMobileSelectedMemberId(member.id)}
+                            className={`shrink-0 rounded-lg border px-3 py-2 text-left ${
+                              selected ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <p className="text-sm font-semibold">{member.full_name}</p>
+                            <p className="text-[11px] text-slate-500">{count}회 배정</p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3 border-b flex flex-row items-center justify-between gap-2">
+                <CardTitle className="text-sm font-semibold">월간 예배 보드</CardTitle>
+                <div className="inline-flex items-center gap-1 rounded-md border bg-white p-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setCurrentMonth(addMonths(currentMonth, -1))}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="min-w-24 text-center text-xs font-semibold">
+                    {format(currentMonth, 'yyyy년 M월', { locale: ko })}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-3">
+                {servicesInMonth.length === 0 ? (
+                  <p className="text-sm text-slate-500">이번 달 예배 일정이 없습니다.</p>
+                ) : (
+                  servicesInMonth.map((service) => {
+                    const laneAssignments = (activeTeamAssignmentsByService.get(service.id) || []).sort((a, b) => {
+                      const aName = profileById.get(a.profile_id)?.full_name || ''
+                      const bName = profileById.get(b.profile_id)?.full_name || ''
+                      return aName.localeCompare(bName, 'ko')
+                    })
+                    return (
+                      <div key={service.id} className="rounded-lg border bg-white p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-xs text-slate-500">{format(parseISO(service.date), 'M월 d일 (EEE)', { locale: ko })}</p>
+                            <p className="text-sm font-semibold">{service.title}</p>
+                          </div>
+                          <Link href={`/admin/services/${service.id}`} className="text-[11px] text-slate-500 hover:underline">
+                            상세
+                          </Link>
+                        </div>
+
+                        {laneAssignments.length === 0 ? (
+                          <p className="rounded-md border border-dashed p-2 text-xs text-slate-400">아직 배정된 팀원이 없습니다.</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {laneAssignments.map((assignment) => (
+                              <div key={assignment.id} className="flex items-center justify-between rounded-md border bg-slate-50 px-2 py-1.5">
+                                <div>
+                                  <p className="text-xs font-medium">{profileById.get(assignment.profile_id)?.full_name || '이름 없음'}</p>
+                                  <p className="text-[11px] text-slate-500">{assignment.role_name}</p>
+                                </div>
+                                <Button type="button" variant="ghost" size="icon" onClick={() => void deleteAssignment(assignment.id)}>
+                                  <Trash2 className="h-4 w-4 text-red-400" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <Button
+                          type="button"
+                          className="mt-2 w-full"
+                          disabled={saveLoading || !mobileSelectedMemberId}
+                          onClick={() => void handleMobileAssign(service.id)}
+                        >
+                          {mobileSelectedMemberId
+                            ? `${profileById.get(mobileSelectedMemberId)?.full_name || '선택 팀원'} 배정`
+                            : '팀원을 먼저 선택하세요'}
+                        </Button>
+                      </div>
+                    )
+                  })
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="hidden gap-4 lg:grid xl:grid-cols-[320px_1fr]">
             <Card>
               <CardHeader className="pb-3 border-b">
                 <CardTitle className="text-sm font-semibold">팀원 풀</CardTitle>
