@@ -1,0 +1,302 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { addMonths, compareAsc, endOfMonth, format, isSameMonth, parseISO, startOfMonth } from 'date-fns'
+import { ko } from 'date-fns/locale'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase/client'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+interface Service {
+  id: string
+  date: string
+  title: string
+  status: string
+}
+
+interface Team {
+  id: string
+  name: string
+}
+
+interface AssignmentRow {
+  id: string
+  service_id: string
+  team_id: string
+  profile_id: string
+  role_name: string
+}
+
+interface ProfileRef {
+  id: string
+  full_name: string
+}
+
+interface AssignmentDisplay {
+  id: string
+  service_id: string
+  team_id: string
+  profile_id: string
+  role_name: string
+  profileName: string
+}
+
+export default function AdminPage() {
+  const supabase = useMemo(() => createClient(), [])
+
+  const [services, setServices] = useState<Service[]>([])
+  const [teams, setTeams] = useState<Team[]>([])
+  const [profiles, setProfiles] = useState<ProfileRef[]>([])
+  const [assignments, setAssignments] = useState<AssignmentRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()))
+
+  useEffect(() => {
+    let active = true
+
+    const loadData = async () => {
+      setLoading(true)
+
+      const [servicesRes, teamsRes, profilesRes, assignmentsRes] = await Promise.all([
+        supabase.from('services').select('id, title, date, status').order('date', { ascending: false }),
+        supabase.from('teams').select('id, name').order('name', { ascending: true }),
+        supabase.from('profiles').select('id, full_name').order('full_name', { ascending: true }),
+        supabase.from('assignments').select('id, service_id, team_id, profile_id, role_name'),
+      ])
+
+      if (!active) return
+
+      if (servicesRes.error) toast.error('예배 정보를 불러오지 못했습니다.')
+      else setServices((servicesRes.data || []) as Service[])
+
+      if (teamsRes.error) toast.error('팀 정보를 불러오지 못했습니다.')
+      else setTeams((teamsRes.data || []) as Team[])
+
+      if (profilesRes.error) toast.error('팀원 정보를 불러오지 못했습니다.')
+      else setProfiles((profilesRes.data || []) as ProfileRef[])
+
+      if (assignmentsRes.error) toast.error('배정 정보를 불러오지 못했습니다.')
+      else setAssignments((assignmentsRes.data || []) as AssignmentRow[])
+
+      if (active) setLoading(false)
+    }
+
+    void loadData()
+
+    return () => {
+      active = false
+    }
+  }, [supabase])
+
+  const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles])
+
+  const servicesInMonth = useMemo(() => {
+    return services
+      .filter((service) => isSameMonth(parseISO(service.date), currentMonth))
+      .sort((a, b) => compareAsc(parseISO(a.date), parseISO(b.date)))
+  }, [currentMonth, services])
+
+  const serviceIdsInMonth = useMemo(() => new Set(servicesInMonth.map((service) => service.id)), [servicesInMonth])
+
+  const assignmentsInMonth = useMemo(() => {
+    return assignments.filter((assignment) => serviceIdsInMonth.has(assignment.service_id))
+  }, [assignments, serviceIdsInMonth])
+
+  const assignmentsDisplayInMonth = useMemo(() => {
+    return assignmentsInMonth.map((assignment) => ({
+      ...assignment,
+      profileName: profileById.get(assignment.profile_id)?.full_name || '이름 없음',
+    })) as AssignmentDisplay[]
+  }, [assignmentsInMonth, profileById])
+
+  const assignmentsByServiceId = useMemo(() => {
+    const grouped = new Map<string, AssignmentDisplay[]>()
+    assignmentsDisplayInMonth.forEach((assignment) => {
+      const list = grouped.get(assignment.service_id) || []
+      list.push(assignment)
+      grouped.set(assignment.service_id, list)
+    })
+    return grouped
+  }, [assignmentsDisplayInMonth])
+
+  const assignmentsByTeamService = useMemo(() => {
+    const grouped = new Map<string, AssignmentDisplay[]>()
+    assignmentsDisplayInMonth.forEach((assignment) => {
+      const key = `${assignment.team_id}__${assignment.service_id}`
+      const list = grouped.get(key) || []
+      list.push(assignment)
+      grouped.set(key, list)
+    })
+    return grouped
+  }, [assignmentsDisplayInMonth])
+
+  const servicesByDay = useMemo(() => {
+    const grouped = new Map<number, Service[]>()
+    servicesInMonth.forEach((service) => {
+      const day = parseISO(service.date).getDate()
+      const list = grouped.get(day) || []
+      list.push(service)
+      grouped.set(day, list)
+    })
+    return grouped
+  }, [servicesInMonth])
+
+  const calendarCells = useMemo(() => {
+    const monthStart = startOfMonth(currentMonth)
+    const monthEnd = endOfMonth(currentMonth)
+    const leadingEmptyCells = monthStart.getDay()
+    const daysInMonth = monthEnd.getDate()
+    const totalCells = leadingEmptyCells + daysInMonth
+    const trailingEmptyCells = (7 - (totalCells % 7)) % 7
+
+    const cells: Array<number | null> = []
+    for (let i = 0; i < leadingEmptyCells; i++) cells.push(null)
+    for (let day = 1; day <= daysInMonth; day++) cells.push(day)
+    for (let i = 0; i < trailingEmptyCells; i++) cells.push(null)
+    return cells
+  }, [currentMonth])
+
+  const weekDays = ['일', '월', '화', '수', '목', '금', '토']
+
+  if (loading) {
+    return <div className="p-20 text-center text-slate-500">대시보드 데이터를 불러오는 중...</div>
+  }
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">대시보드</h1>
+        <div className="inline-flex items-center gap-1 rounded-lg border bg-white p-1">
+          <Button type="button" variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="min-w-28 text-center text-sm font-semibold">
+            {format(currentMonth, 'yyyy년 M월', { locale: ko })}
+          </span>
+          <Button type="button" variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </header>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">월간 캘린더</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-7 gap-2 mb-2">
+            {weekDays.map((day) => (
+              <div key={day} className="py-2 text-center text-xs font-semibold text-slate-500">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-2">
+            {calendarCells.map((day, index) => (
+              <div
+                key={`${day ?? 'empty'}-${index}`}
+                className={`min-h-28 rounded-lg border p-2 ${day ? 'bg-white' : 'bg-slate-50 border-dashed'}`}
+              >
+                {day && (
+                  <>
+                    <p className="mb-1 text-xs font-semibold text-slate-600">{day}일</p>
+                    <div className="space-y-1">
+                      {(servicesByDay.get(day) || []).map((service) => {
+                        const serviceAssignments = assignmentsByServiceId.get(service.id) || []
+                        const assignedTeams = new Set(serviceAssignments.map((assignment) => assignment.team_id)).size
+                        const unassignedTeams = Math.max(teams.length - assignedTeams, 0)
+
+                        return (
+                          <Link
+                            key={service.id}
+                            href={`/admin/services/${service.id}`}
+                            className="block rounded border bg-slate-50 px-2 py-1 text-[11px] hover:bg-blue-50"
+                          >
+                            <p className="line-clamp-1 font-medium">{service.title}</p>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700">
+                                {assignedTeams}/{teams.length}팀 배정
+                              </span>
+                              {unassignedTeams > 0 && (
+                                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
+                                  미배정 {unassignedTeams}팀
+                                </span>
+                              )}
+                            </div>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">팀별 매트릭스</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {servicesInMonth.length === 0 ? (
+            <div className="py-16 text-center text-slate-400">이번 달 예배 일정이 없습니다.</div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border bg-white">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b bg-slate-50">
+                  <tr>
+                    <th className="w-40 px-4 py-3 text-xs font-semibold uppercase text-slate-500">팀</th>
+                    {servicesInMonth.map((service) => (
+                      <th key={service.id} className="min-w-52 px-4 py-3 align-top">
+                        <Link href={`/admin/services/${service.id}`} className="hover:underline">
+                          <p className="text-xs text-slate-500">{format(parseISO(service.date), 'M/d (EEE)', { locale: ko })}</p>
+                          <p className="mt-1 text-sm font-semibold">{service.title}</p>
+                        </Link>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {teams.map((team) => (
+                    <tr key={team.id} className="border-b align-top last:border-b-0">
+                      <td className="px-4 py-3 font-semibold text-slate-700">{team.name}</td>
+                      {servicesInMonth.map((service) => {
+                        const key = `${team.id}__${service.id}`
+                        const cellAssignments = assignmentsByTeamService.get(key) || []
+
+                        return (
+                          <td key={key} className="px-4 py-3">
+                            <Link href={`/admin/services/${service.id}`} className="block rounded-md border p-2 hover:bg-slate-50">
+                              {cellAssignments.length === 0 ? (
+                                <span className="text-xs text-slate-400">미배정</span>
+                              ) : (
+                                <div className="space-y-1">
+                                  {cellAssignments.map((assignment) => (
+                                    <div key={assignment.id} className="text-xs">
+                                      <span className="font-medium">{assignment.profileName}</span>
+                                      <span className="text-slate-500"> · {assignment.role_name}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </Link>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

@@ -1,6 +1,6 @@
 "use client"
 
-import { Button as ButtonPrimitive } from "@base-ui/react/button"
+import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
@@ -42,19 +42,36 @@ const buttonVariants = cva(
   }
 )
 
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
-  return (
-    <ButtonPrimitive
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
-  )
-}
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean
+  }
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant = "default", size = "default", asChild = false, children, type, ...props }, ref) => {
+    const classes = cn(buttonVariants({ variant, size, className }))
+
+    if (asChild && React.isValidElement(children)) {
+      const child = children as React.ReactElement<{ className?: string }>
+      return React.cloneElement(child, {
+        className: cn(classes, child.props.className),
+      })
+    }
+
+    return (
+      <button
+        ref={ref}
+        data-slot="button"
+        className={classes}
+        type={type ?? "button"}
+        {...props}
+      >
+        {children}
+      </button>
+    )
+  }
+)
+
+Button.displayName = "Button"
 
 export { Button, buttonVariants }
