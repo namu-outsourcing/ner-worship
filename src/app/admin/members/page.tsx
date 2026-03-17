@@ -227,7 +227,85 @@ export default function MembersAdminPage() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="md:hidden space-y-3 p-3">
+            {members.map((member) => (
+              <div key={member.id} className="rounded-lg border bg-white p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                      <User className="h-4 w-4" />
+                    </div>
+                    <p className="truncate text-base font-semibold break-keep">{member.full_name}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${roleBadgeClass(member.role)}`}>
+                    {roleLabel(member.role)}
+                  </span>
+                </div>
+
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <p className="mb-1 text-[11px] font-semibold text-slate-500">소속 팀</p>
+                    {(teamsByMember[member.id] || []).length === 0 ? (
+                      <span className="text-xs text-slate-400">미소속</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {(teamsByMember[member.id] || []).map((teamName) => (
+                          <span key={`${member.id}-${teamName}`} className="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-700 break-keep">
+                            {teamName}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="mb-1 text-[11px] font-semibold text-slate-500">생일</p>
+                    <Input
+                      type="date"
+                      value={birthdayDrafts[member.id] || ''}
+                      onChange={(event) =>
+                        setBirthdayDrafts((prev) => ({
+                          ...prev,
+                          [member.id]: event.target.value,
+                        }))
+                      }
+                      onBlur={() => void handleSaveBirthday(member.id)}
+                      disabled={birthdaySavingId === member.id}
+                      className="h-9 w-full text-sm"
+                    />
+                  </div>
+
+                  <div className="text-xs text-slate-500">
+                    가입일: {new Date(member.created_at).toLocaleDateString()}
+                  </div>
+
+                  {canEditRole && (
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold text-slate-500">권한 변경</p>
+                      <Select
+                        defaultValue={member.role}
+                        onValueChange={(val) => handleUpdateRole(member.id, val)}
+                      >
+                        <SelectTrigger className="h-9 w-full text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="division_leader">부문장</SelectItem>
+                          <SelectItem value="service_admin">시스템 관리자</SelectItem>
+                          <SelectItem value="team_leader">팀장</SelectItem>
+                          <SelectItem value="secretary">총무</SelectItem>
+                          <SelectItem value="worship_leader">인도자</SelectItem>
+                          <SelectItem value="member">팀원</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b">
                 <tr>
@@ -242,11 +320,13 @@ export default function MembersAdminPage() {
               <tbody className="divide-y">
                 {members.map((member) => (
                   <tr key={member.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                        <User className="w-4 h-4" />
+                    <td className="px-6 py-4 font-medium">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                          <User className="h-4 w-4" />
+                        </div>
+                        {member.full_name}
                       </div>
-                      {member.full_name}
                     </td>
                     <td className="px-6 py-4">
                       {(teamsByMember[member.id] || []).length === 0 ? (
@@ -280,7 +360,7 @@ export default function MembersAdminPage() {
                       {new Date(member.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${roleBadgeClass(member.role)}`}>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${roleBadgeClass(member.role)}`}>
                         {roleLabel(member.role)}
                       </span>
                     </td>
@@ -290,7 +370,7 @@ export default function MembersAdminPage() {
                           defaultValue={member.role}
                           onValueChange={(val) => handleUpdateRole(member.id, val)}
                         >
-                          <SelectTrigger className="w-36 h-8 text-xs">
+                          <SelectTrigger className="h-8 w-36 text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>

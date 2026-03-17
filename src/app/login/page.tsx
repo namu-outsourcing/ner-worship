@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
@@ -16,8 +16,23 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
   const [fullName, setFullName] = useState('')
+  const [showIntro, setShowIntro] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    const introSeen = sessionStorage.getItem('ner_login_intro_seen') === '1'
+    if (introSeen) return
+
+    setShowIntro(true)
+    sessionStorage.setItem('ner_login_intro_seen', '1')
+
+    const timer = window.setTimeout(() => {
+      setShowIntro(false)
+    }, 1800)
+
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -64,7 +79,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-50 p-4">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 p-4">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(30,64,175,0.08),transparent_45%),radial-gradient(circle_at_80%_80%,rgba(15,23,42,0.08),transparent_45%)]" />
+      {showIntro && (
+        <div className="login-intro-overlay" aria-hidden>
+          <div className="login-intro-grid" />
+          <div className="login-intro-title-wrap">
+            <p className="login-intro-title">ner worship</p>
+          </div>
+          <span className="login-intro-ember" />
+        </div>
+      )}
       <Card className="w-full max-w-md shadow-lg border-slate-200">
         <CardHeader className="space-y-1">
           <div className="mx-auto mb-2 h-14 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1">

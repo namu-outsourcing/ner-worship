@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/fixed-services",
+      "schedule": "0 2 24-31 * *"
+    }
+  ]
+}

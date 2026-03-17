@@ -20,6 +20,28 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Fixed 5PM Service Auto-Creation
+
+- `5부 예배`는 Vercel Cron으로 월말(마지막 주) 자동 생성됩니다.
+- 크론 라우트: `/api/cron/fixed-services`
+- 스케줄 파일: `vercel.json` (`0 2 24-31 * *`, UTC)
+
+Required env vars:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+CRON_SECRET=...
+```
+
+Optional manual trigger:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  "https://<your-domain>/api/cron/fixed-services?force=1"
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

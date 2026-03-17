@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { LayoutDashboard, Users, Users2, Calendar } from 'lucide-react'
 import logoImage from '@/assets/ner.jpeg'
+import { LogoutButton } from '@/components/auth/logout-button'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -56,9 +57,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           })}
         </nav>
         <div className="border-t border-slate-200 p-4">
-          <Link href="/" className="text-sm text-blue-600 hover:underline">
-            메인으로 돌아가기
-          </Link>
+          <div className="flex items-center justify-between gap-2">
+            <Link href="/" className="text-sm text-blue-600 hover:underline">
+              메인으로 돌아가기
+            </Link>
+            <LogoutButton variant="ghost" className="text-xs" />
+          </div>
         </div>
       </aside>
 
@@ -75,6 +79,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/" className="text-xs font-medium text-blue-600 hover:underline">
                 메인으로
               </Link>
+            </div>
+            <div className="mt-2 flex justify-end">
+              <LogoutButton variant="ghost" className="text-xs" />
             </div>
             <nav className="-mx-1 mt-3 flex gap-2 overflow-x-auto pb-1">
               {navItems.map((item) => {
