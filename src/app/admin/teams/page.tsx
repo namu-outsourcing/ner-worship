@@ -123,7 +123,9 @@ export default function TeamsAdminPage() {
       setCanManageAll(isDivisionLeader)
       setManagedTeamIds(teamIds)
       setRoleLabel(
-        isDivisionLeader
+        scope.role === 'system_admin'
+          ? '시스템 관리자'
+          : isDivisionLeader
           ? '부문장'
           : scope.role === 'team_leader'
             ? '팀장'

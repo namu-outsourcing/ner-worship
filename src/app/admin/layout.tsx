@@ -1,7 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { LayoutDashboard, Users, Users2, Calendar } from 'lucide-react'
+import logoImage from '@/assets/ner.jpeg'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -15,14 +17,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .eq('id', user.id)
     .single()
 
-  const isAdmin = ['division_leader', 'team_leader', 'secretary'].includes(profile?.role || '')
-  const canAccessMembers = ['division_leader', 'team_leader'].includes(profile?.role || '')
+  const isAdmin = ['system_admin', 'division_leader', 'team_leader', 'secretary', 'service_admin'].includes(profile?.role || '')
+  const canAccessMembers = ['system_admin', 'division_leader', 'team_leader', 'service_admin'].includes(profile?.role || '')
+  const canAccessTeams = ['system_admin', 'division_leader', 'team_leader', 'secretary', 'service_admin'].includes(profile?.role || '')
 
   if (!isAdmin) redirect('/')
 
   const navItems = [
     { href: '/admin', label: '대시보드', icon: LayoutDashboard },
-    { href: '/admin/teams', label: '팀 관리', icon: Users2 },
+    ...(canAccessTeams ? [{ href: '/admin/teams', label: '팀 관리', icon: Users2 }] : []),
     ...(canAccessMembers ? [{ href: '/admin/members', label: '팀원 관리', icon: Users }] : []),
     { href: '/admin/services', label: '예배 스케줄 관리', icon: Calendar },
   ]
@@ -31,7 +34,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="flex min-h-screen bg-slate-50">
       <aside className="hidden w-64 flex-col border-r border-slate-200 bg-white lg:flex">
         <div className="p-6 border-b border-slate-200">
-          <h2 className="text-xl font-bold">Admin Panel</h2>
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-24 overflow-hidden rounded-lg border border-slate-200 bg-white p-1">
+              <Image src={logoImage} alt="NER Worship 로고" className="h-full w-full object-contain" />
+            </div>
+            <h2 className="text-xl font-bold">Admin Panel</h2>
+          </div>
         </div>
         <nav className="flex-1 p-4 space-y-2">
           {navItems.map((item) => {
@@ -58,7 +66,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:hidden">
           <div className="px-4 py-3">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold">Admin Panel</h2>
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-20 overflow-hidden rounded-lg border border-slate-200 bg-white p-1">
+                  <Image src={logoImage} alt="NER Worship 로고" className="h-full w-full object-contain" />
+                </div>
+                <h2 className="text-lg font-bold">Admin Panel</h2>
+              </div>
               <Link href="/" className="text-xs font-medium text-blue-600 hover:underline">
                 메인으로
               </Link>

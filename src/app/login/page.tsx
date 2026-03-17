@@ -2,11 +2,13 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
 import { toast } from 'sonner'
+import logoImage from '@/assets/ner.jpeg'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -53,8 +55,9 @@ export default function LoginPage() {
         router.push('/')
         router.refresh()
       }
-    } catch (error: any) {
-      toast.error(error.message)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '인증 처리 중 오류가 발생했습니다.'
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -64,6 +67,9 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-screen bg-slate-50 p-4">
       <Card className="w-full max-w-md shadow-lg border-slate-200">
         <CardHeader className="space-y-1">
+          <div className="mx-auto mb-2 h-14 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1">
+            <Image src={logoImage} alt="NER Worship 로고" className="h-full w-full object-contain" />
+          </div>
           <CardTitle className="text-2xl font-bold text-center">
             {isSignUp ? 'Worship Scheduler 가입' : '예배팀 로그인'}
           </CardTitle>

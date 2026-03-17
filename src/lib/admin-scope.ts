@@ -10,7 +10,7 @@ interface TeamMembershipRow {
   team_id: string
 }
 
-const ADMIN_ROLES = new Set(['division_leader', 'team_leader', 'secretary'])
+const ADMIN_ROLES = new Set(['system_admin', 'division_leader', 'team_leader', 'secretary', 'service_admin'])
 
 interface AuthClient {
   auth: {
@@ -43,7 +43,7 @@ export async function getAdminScope(supabase: AuthClient): Promise<AdminScope> {
   const { data: profileData } = await profilesQuery.select('role').eq('id', userId).maybeSingle()
   const role = (profileData?.role as string | undefined) || null
   const isAdmin = ADMIN_ROLES.has(role || '')
-  const isDivisionLeader = role === 'division_leader'
+  const isDivisionLeader = role === 'division_leader' || role === 'system_admin' || role === 'service_admin'
 
   if (!isAdmin) {
     return {

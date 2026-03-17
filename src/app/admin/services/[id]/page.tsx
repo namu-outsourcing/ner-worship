@@ -173,7 +173,7 @@ export default function ServiceDetailPage() {
 
   const canEditResources = useMemo(() => {
     if (!currentUserId) return false
-    if (currentUserRole === 'division_leader') return true
+    if (currentUserRole === 'system_admin' || currentUserRole === 'division_leader' || currentUserRole === 'service_admin') return true
     return assignments.some(
       (assignment) =>
         assignment.profile_id === currentUserId &&
@@ -207,7 +207,7 @@ export default function ServiceDetailPage() {
 
   const handleSaveResources = async () => {
     if (!canEditResources) {
-      toast.error('인도자 또는 최고 관리자만 콘티/묵상을 수정할 수 있습니다.')
+      toast.error('인도자 또는 최고 관리자(시스템 관리자/부문장)만 콘티/묵상을 수정할 수 있습니다.')
       return
     }
 

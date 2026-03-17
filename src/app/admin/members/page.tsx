@@ -51,7 +51,13 @@ export default function MembersAdminPage() {
     }
 
     setCanEditRole(scope.isDivisionLeader)
-    setCurrentRoleLabel(scope.isDivisionLeader ? '부문장' : '팀장')
+    setCurrentRoleLabel(
+      scope.role === 'system_admin'
+        ? '시스템 관리자'
+        : scope.isDivisionLeader
+          ? '부문장'
+          : '팀장'
+    )
 
     let membersRes:
       | { data: Profile[] | null; error: { message: string } | null }
@@ -136,7 +142,7 @@ export default function MembersAdminPage() {
 
   const handleUpdateRole = async (userId: string, newRole: string | null) => {
     if (accessDenied || !canEditRole) {
-      toast.error('부문장만 권한 변경이 가능합니다.')
+      toast.error('시스템 관리자 또는 부문장만 권한 변경이 가능합니다.')
       return
     }
     if (!newRole) return
@@ -187,6 +193,8 @@ export default function MembersAdminPage() {
 
   const roleBadgeClass = (role: string) => {
     if (role === 'division_leader') return 'bg-purple-100 text-purple-700'
+    if (role === 'system_admin') return 'bg-indigo-100 text-indigo-700'
+    if (role === 'service_admin') return 'bg-indigo-100 text-indigo-700'
     if (role === 'team_leader') return 'bg-blue-100 text-blue-700'
     if (role === 'secretary') return 'bg-green-100 text-green-700'
     if (role === 'worship_leader') return 'bg-amber-100 text-amber-700'
@@ -195,6 +203,8 @@ export default function MembersAdminPage() {
 
   const roleLabel = (role: string) => {
     if (role === 'division_leader') return '부문장'
+    if (role === 'system_admin') return '시스템 관리자'
+    if (role === 'service_admin') return '시스템 관리자'
     if (role === 'team_leader') return '팀장'
     if (role === 'secretary') return '총무'
     if (role === 'worship_leader') return '인도자'
@@ -202,7 +212,7 @@ export default function MembersAdminPage() {
   }
 
   if (loading) return <div className="p-20 text-center">로딩 중...</div>
-  if (accessDenied) return <div className="p-20 text-center text-slate-500">부문장 또는 팀장만 접근할 수 있습니다.</div>
+  if (accessDenied) return <div className="p-20 text-center text-slate-500">시스템 관리자, 부문장 또는 팀장만 접근할 수 있습니다.</div>
 
   return (
     <div className="space-y-6">
@@ -285,6 +295,7 @@ export default function MembersAdminPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="division_leader">부문장</SelectItem>
+                            <SelectItem value="service_admin">시스템 관리자</SelectItem>
                             <SelectItem value="team_leader">팀장</SelectItem>
                             <SelectItem value="secretary">총무</SelectItem>
                             <SelectItem value="worship_leader">인도자</SelectItem>
