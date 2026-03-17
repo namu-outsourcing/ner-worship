@@ -7,6 +7,7 @@ import { ko } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { MobileAdminMonthlyCalendar, type MobileAdminDayData, type MobileDetailBadge } from '@/components/dashboard/mobile-admin-monthly-calendar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -196,6 +197,37 @@ export default function AdminPage() {
 
   const weekDays = ['일', '월', '화', '수', '목', '금', '토']
 
+  const mobileCalendarDayData = useMemo(() => {
+    const data: Record<number, MobileAdminDayData> = {}
+
+    calendarCells.forEach((day) => {
+      if (!day) return
+
+      const birthdays = (birthdaysByDay.get(day) || []).map((profile) => profile.full_name)
+      const services = (servicesByDay.get(day) || []).map((service) => {
+        const serviceAssignments = assignmentsByServiceId.get(service.id) || []
+        const assignedTeams = new Set(serviceAssignments.map((assignment) => assignment.team_id)).size
+        const unassignedTeams = Math.max(teams.length - assignedTeams, 0)
+        const badges: MobileDetailBadge[] = [{ text: `${assignedTeams}/${teams.length}팀 배정`, tone: 'blue' }]
+
+        if (unassignedTeams > 0) {
+          badges.push({ text: `미배정 ${unassignedTeams}팀`, tone: 'amber' })
+        }
+
+        return {
+          id: service.id,
+          title: service.title,
+          href: `/admin/services/${service.id}`,
+          badges,
+        }
+      })
+
+      data[day] = { day, birthdays, services }
+    })
+
+    return data
+  }, [assignmentsByServiceId, birthdaysByDay, calendarCells, servicesByDay, teams.length])
+
   const handleOpenCreateDialog = (day: number) => {
     const nextDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day)
     const dateValue = format(nextDate, 'yyyy-MM-dd')
@@ -247,16 +279,21 @@ export default function AdminPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">대시보드</h1>
-        <div className="inline-flex w-full items-center justify-between gap-1 rounded-lg border bg-white p-1 sm:w-auto sm:justify-start">
-          <Button type="button" variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))}>
-            <ChevronLeft className="w-4 h-4" />
+        <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
+          <Button asChild type="button" variant="outline" className="h-9 px-3 text-xs sm:text-sm">
+            <Link href="/">메인화면으로 가기</Link>
           </Button>
-          <span className="flex-1 text-center text-sm font-semibold sm:min-w-28 sm:flex-none">
-            {format(currentMonth, 'yyyy년 M월', { locale: ko })}
-          </span>
-          <Button type="button" variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
-            <ChevronRight className="w-4 h-4" />
-          </Button>
+          <div className="inline-flex w-full items-center justify-between gap-1 rounded-lg border bg-white p-1 sm:w-auto sm:justify-start">
+            <Button type="button" variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, -1))}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="flex-1 text-center text-sm font-semibold sm:min-w-28 sm:flex-none">
+              {format(currentMonth, 'yyyy년 M월', { locale: ko })}
+            </span>
+            <Button type="button" variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -331,76 +368,88 @@ export default function AdminPage() {
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="mb-2 grid grid-cols-7 gap-1.5 md:gap-2">
-            {weekDays.map((day) => (
-              <div key={day} className="py-2 text-center text-xs font-semibold text-slate-500">
-                {day}
-              </div>
-            ))}
-          </div>
+          <MobileAdminMonthlyCalendar
+            monthLabel={format(currentMonth, 'yyyy년 M월', { locale: ko })}
+            totalServices={servicesInMonth.length}
+            weekDays={weekDays}
+            cells={calendarCells}
+            dayDataByDay={mobileCalendarDayData}
+            onCreateDay={handleOpenCreateDialog}
+            createButtonLabel="일정 등록"
+          />
 
-          <div className="grid grid-cols-7 gap-1.5 md:gap-2">
-            {calendarCells.map((day, index) => (
-              <div
-                key={`${day ?? 'empty'}-${index}`}
-                className={`min-h-24 rounded-lg border p-2 md:min-h-28 ${day ? 'bg-white' : 'border-dashed bg-slate-50'}`}
-              >
-                {day && (
-                  <>
-                    <div className="mb-1 flex items-center justify-between gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCreateDialog(day)}
-                        className="rounded px-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                      >
-                        {day}일
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCreateDialog(day)}
-                        className="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-200 text-slate-500 hover:bg-slate-100"
-                        aria-label={`${day}일 일정 등록`}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                    </div>
-                    <div className="space-y-1">
-                      {(birthdaysByDay.get(day) || []).map((profile) => (
-                        <div key={`birthday-${profile.id}`} className="rounded border border-pink-200 bg-pink-50 px-2 py-1 text-[11px] text-pink-700">
-                          🎂 {profile.full_name}
-                        </div>
-                      ))}
+          <div className="hidden md:block">
+            <div className="mb-2 grid grid-cols-7 gap-1.5 md:gap-2">
+              {weekDays.map((day) => (
+                <div key={day} className="py-2 text-center text-xs font-semibold text-slate-500">
+                  {day}
+                </div>
+              ))}
+            </div>
 
-                      {(servicesByDay.get(day) || []).map((service) => {
-                        const serviceAssignments = assignmentsByServiceId.get(service.id) || []
-                        const assignedTeams = new Set(serviceAssignments.map((assignment) => assignment.team_id)).size
-                        const unassignedTeams = Math.max(teams.length - assignedTeams, 0)
+            <div className="grid grid-cols-7 gap-1.5 md:gap-2">
+              {calendarCells.map((day, index) => (
+                <div
+                  key={`${day ?? 'empty'}-${index}`}
+                  className={`min-h-24 rounded-lg border p-2 md:min-h-28 ${day ? 'bg-white' : 'border-dashed bg-slate-50'}`}
+                >
+                  {day && (
+                    <>
+                      <div className="mb-1 flex items-center justify-between gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCreateDialog(day)}
+                          className="rounded px-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          {day}일
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCreateDialog(day)}
+                          className="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-200 text-slate-500 hover:bg-slate-100"
+                          aria-label={`${day}일 일정 등록`}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <div className="space-y-1">
+                        {(birthdaysByDay.get(day) || []).map((profile) => (
+                          <div key={`birthday-${profile.id}`} className="rounded border border-pink-200 bg-pink-50 px-2 py-1 text-[11px] text-pink-700">
+                            🎂 {profile.full_name}
+                          </div>
+                        ))}
 
-                        return (
-                          <Link
-                            key={service.id}
-                            href={`/admin/services/${service.id}`}
-                            className="block rounded border bg-slate-50 px-2 py-1 text-[11px] hover:bg-blue-50"
-                          >
-                            <p className="line-clamp-1 font-medium">{service.title}</p>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700">
-                                {assignedTeams}/{teams.length}팀 배정
-                              </span>
-                              {unassignedTeams > 0 && (
-                                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
-                                  미배정 {unassignedTeams}팀
+                        {(servicesByDay.get(day) || []).map((service) => {
+                          const serviceAssignments = assignmentsByServiceId.get(service.id) || []
+                          const assignedTeams = new Set(serviceAssignments.map((assignment) => assignment.team_id)).size
+                          const unassignedTeams = Math.max(teams.length - assignedTeams, 0)
+
+                          return (
+                            <Link
+                              key={service.id}
+                              href={`/admin/services/${service.id}`}
+                              className="block rounded border bg-slate-50 px-2 py-1 text-[11px] hover:bg-blue-50"
+                            >
+                              <p className="line-clamp-1 font-medium">{service.title}</p>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700">
+                                  {assignedTeams}/{teams.length}팀 배정
                                 </span>
-                              )}
-                            </div>
-                          </Link>
-                        )
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
+                                {unassignedTeams > 0 && (
+                                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
+                                    미배정 {unassignedTeams}팀
+                                  </span>
+                                )}
+                              </div>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>

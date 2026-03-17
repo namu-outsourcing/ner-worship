@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { format, parseISO } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { ChevronLeft, Globe } from 'lucide-react'
+import { ChevronLeft, Globe, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -40,11 +40,21 @@ interface Assignment {
 interface ServiceResource {
   service_id: string
   setlist_urls: string[] | null
+  setlist_titles: string[] | null
   meditation: string | null
 }
 
 interface CurrentUserProfile {
   role: string
+}
+
+function normalizeSetlistInputRows(values: string[]): string[] {
+  const next = [...values]
+  while (next.length > 1 && next[next.length - 1].trim() === '' && next[next.length - 2].trim() === '') {
+    next.pop()
+  }
+  if (next.length === 0) return ['']
+  return next
 }
 
 export default function ServiceDetailPage() {
@@ -60,7 +70,9 @@ export default function ServiceDetailPage() {
   const [loading, setLoading] = useState(true)
   const [resourceSaving, setResourceSaving] = useState(false)
   const [resourceTableReady, setResourceTableReady] = useState(true)
-  const [setlistInputs, setSetlistInputs] = useState<string[]>(['', '', '', '', ''])
+  const [setlistTitleColumnReady, setSetlistTitleColumnReady] = useState(true)
+  const [setlistInputs, setSetlistInputs] = useState<string[]>([''])
+  const [setlistTitles, setSetlistTitles] = useState<string[]>([])
   const [meditationText, setMeditationText] = useState('')
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
@@ -80,11 +92,38 @@ export default function ServiceDetailPage() {
           .from('assignments')
           .select('id, service_id, team_id, profile_id, role_name')
           .eq('service_id', id),
-        supabase
-          .from('service_resources')
-          .select('service_id, setlist_urls, meditation')
-          .eq('service_id', id)
-          .maybeSingle(),
+        (async () => {
+          const withTitles = await supabase
+            .from('service_resources')
+            .select('service_id, setlist_urls, setlist_titles, meditation')
+            .eq('service_id', id)
+            .maybeSingle()
+
+          if (withTitles.error?.code === '42703') {
+            const fallback = await supabase
+              .from('service_resources')
+              .select('service_id, setlist_urls, meditation')
+              .eq('service_id', id)
+              .maybeSingle()
+
+            return {
+              data: fallback.data
+                ? ({
+                    ...fallback.data,
+                    setlist_titles: null,
+                  } as ServiceResource)
+                : null,
+              error: fallback.error,
+              titleColumnReady: false,
+            }
+          }
+
+          return {
+            data: (withTitles.data as ServiceResource | null) || null,
+            error: withTitles.error,
+            titleColumnReady: true,
+          }
+        })(),
         userId
           ? supabase.from('profiles').select('role').eq('id', userId).maybeSingle()
           : Promise.resolve({ data: null, error: null }),
@@ -107,6 +146,7 @@ export default function ServiceDetailPage() {
       } else {
         setResourceTableReady(true)
       }
+      setSetlistTitleColumnReady(resourceRes.titleColumnReady)
 
       setService(serviceRes.data as Service)
       setTeams((teamsRes.data || []) as Team[])
@@ -117,9 +157,11 @@ export default function ServiceDetailPage() {
 
       const resource = resourceRes.data as ServiceResource | null
       const sourceUrls = resource?.setlist_urls || []
-      const paddedUrls = [...sourceUrls]
-      while (paddedUrls.length < 5) paddedUrls.push('')
-      setSetlistInputs(paddedUrls.slice(0, 5))
+      const sourceTitles = resource?.setlist_titles || []
+      const preparedRows = sourceUrls.length > 0 ? [...sourceUrls, ''] : ['']
+
+      setSetlistInputs(normalizeSetlistInputRows(preparedRows))
+      setSetlistTitles(sourceTitles.slice(0, sourceUrls.length))
       setMeditationText(resource?.meditation || '')
     } finally {
       setLoading(false)
@@ -159,9 +201,13 @@ export default function ServiceDetailPage() {
     return new Set(assignments.map((assignment) => assignment.team_id)).size
   }, [assignments])
 
-  const setlistVideoIds = useMemo(() => {
-    return extractYouTubeVideoIds(setlistInputs)
+  const cleanedSetlistUrls = useMemo(() => {
+    return setlistInputs.map((item) => item.trim()).filter(Boolean)
   }, [setlistInputs])
+
+  const setlistVideoIds = useMemo(() => {
+    return extractYouTubeVideoIds(cleanedSetlistUrls)
+  }, [cleanedSetlistUrls])
 
   const queueUrl = useMemo(() => {
     return buildYoutubeQueueUrl(setlistVideoIds)
@@ -170,6 +216,13 @@ export default function ServiceDetailPage() {
   const embedUrl = useMemo(() => {
     return buildYoutubeEmbedPlaylistUrl(setlistVideoIds)
   }, [setlistVideoIds])
+
+  const visibleSetlistTitles = useMemo(() => {
+    return cleanedSetlistUrls.map((url, index) => ({
+      url,
+      title: setlistTitles[index]?.trim() || '',
+    }))
+  }, [cleanedSetlistUrls, setlistTitles])
 
   const canEditResources = useMemo(() => {
     if (!currentUserId) return false
@@ -198,11 +251,49 @@ export default function ServiceDetailPage() {
   }
 
   const handleSetlistInputChange = (index: number, value: string) => {
+    setSetlistTitles([])
     setSetlistInputs((prev) => {
       const next = [...prev]
       next[index] = value
-      return next
+      if (index === next.length - 1 && value.trim()) {
+        next.push('')
+      }
+      return normalizeSetlistInputRows(next)
     })
+  }
+
+  const handleAddSetlistInput = () => {
+    setSetlistInputs((prev) => [...normalizeSetlistInputRows(prev), ''])
+  }
+
+  const handleRemoveSetlistInput = (index: number) => {
+    setSetlistTitles([])
+    setSetlistInputs((prev) => {
+      if (prev.length <= 1) return ['']
+      const next = prev.filter((_, i) => i !== index)
+      return normalizeSetlistInputRows(next.length > 0 ? next : [''])
+    })
+  }
+
+  const fetchSetlistTitles = async (urls: string[]) => {
+    if (urls.length === 0) return []
+
+    try {
+      const res = await fetch('/api/youtube/title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls }),
+      })
+
+      if (!res.ok) return urls.map(() => '')
+
+      const data = (await res.json()) as { titles?: unknown }
+      if (!Array.isArray(data.titles)) return urls.map(() => '')
+
+      return data.titles.map((title) => (typeof title === 'string' ? title : ''))
+    } catch {
+      return urls.map(() => '')
+    }
   }
 
   const handleSaveResources = async () => {
@@ -218,15 +309,36 @@ export default function ServiceDetailPage() {
 
     setResourceSaving(true)
     try {
-      const cleanedUrls = setlistInputs.map((item) => item.trim()).filter(Boolean).slice(0, 5)
-      const { error } = await supabase.from('service_resources').upsert(
-        {
+      const cleanedUrls = cleanedSetlistUrls
+      const fetchedTitles = await fetchSetlistTitles(cleanedUrls)
+
+      let payload: {
+        service_id: string
+        setlist_urls: string[]
+        setlist_titles?: string[]
+        meditation: string
+      } = {
+        service_id: id,
+        setlist_urls: cleanedUrls,
+        meditation: meditationText.trim(),
+      }
+
+      if (setlistTitleColumnReady) {
+        payload = { ...payload, setlist_titles: fetchedTitles }
+      }
+
+      let { error } = await supabase.from('service_resources').upsert(payload, { onConflict: 'service_id' })
+
+      if (error?.code === '42703' && setlistTitleColumnReady) {
+        setSetlistTitleColumnReady(false)
+        const retryPayload = {
           service_id: id,
           setlist_urls: cleanedUrls,
           meditation: meditationText.trim(),
-        },
-        { onConflict: 'service_id' }
-      )
+        }
+        const retry = await supabase.from('service_resources').upsert(retryPayload, { onConflict: 'service_id' })
+        error = retry.error
+      }
 
       if (error) {
         if (error.code === '42P01') {
@@ -238,6 +350,7 @@ export default function ServiceDetailPage() {
         return
       }
 
+      setSetlistTitles(fetchedTitles)
       toast.success('콘티와 묵상이 임시 저장되었습니다.')
     } finally {
       setResourceSaving(false)
@@ -314,17 +427,46 @@ export default function ServiceDetailPage() {
             </div>
           )}
 
+          {!setlistTitleColumnReady && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              곡 제목 자동 기록을 위해 `setlist_titles` 컬럼 마이그레이션을 적용해 주세요.
+            </div>
+          )}
+
           <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3">
-              <p className="text-sm font-semibold">콘티 (최대 5곡 유튜브 링크)</p>
-              {setlistInputs.map((value, index) => (
-                <Input
-                  key={index}
-                  value={value}
-                  placeholder={`곡 ${index + 1} 유튜브 URL`}
-                  onChange={(event) => handleSetlistInputChange(index, event.target.value)}
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">콘티 (유튜브 링크, 곡 수 제한 없음)</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddSetlistInput}
                   disabled={!canEditResources}
-                />
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  링크 추가
+                </Button>
+              </div>
+              {setlistInputs.map((value, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    value={value}
+                    placeholder={`곡 ${index + 1} 유튜브 URL`}
+                    onChange={(event) => handleSetlistInputChange(index, event.target.value)}
+                    disabled={!canEditResources}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveSetlistInput(index)}
+                    disabled={!canEditResources || setlistInputs.length <= 1}
+                    aria-label={`곡 ${index + 1} 링크 삭제`}
+                  >
+                    <Trash2 className="h-4 w-4 text-slate-500" />
+                  </Button>
+                </div>
               ))}
 
               <p className="pt-2 text-sm font-semibold">묵상</p>
@@ -348,7 +490,7 @@ export default function ServiceDetailPage() {
             <div className="space-y-3 rounded-lg border bg-slate-50 p-4">
               <p className="text-sm font-semibold">자동 재생목록 미리보기</p>
               <p className="text-xs text-slate-500">
-                유튜브 URL을 자동 파싱해 한 번에 재생 가능한 목록을 만듭니다.
+                유튜브 URL을 자동 파싱해 한 번에 재생 가능한 목록을 만들고, 저장 시 곡 제목도 함께 기록합니다.
               </p>
 
               {queueUrl ? (
@@ -373,6 +515,17 @@ export default function ServiceDetailPage() {
                   referrerPolicy="strict-origin-when-cross-origin"
                   allowFullScreen
                 />
+              )}
+
+              {visibleSetlistTitles.length > 0 && (
+                <div className="space-y-1 rounded-md border bg-white p-3">
+                  <p className="text-xs font-semibold text-slate-600">저장될 곡 제목</p>
+                  {visibleSetlistTitles.map((item, index) => (
+                    <p key={`${item.url}-${index}`} className="text-xs text-slate-700">
+                      {index + 1}. {item.title || '제목 확인 전 (저장 시 자동 추출)'}
+                    </p>
+                  ))}
+                </div>
               )}
             </div>
           </div>

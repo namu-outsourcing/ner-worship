@@ -1,36 +1,69 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import Image from 'next/image'
-import { LayoutDashboard, Users, Users2, Calendar, Megaphone } from 'lucide-react'
-import logoImage from '@/assets/ner.jpeg'
-import { LogoutButton } from '@/components/auth/logout-button'
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import {
+  LayoutDashboard,
+  Users,
+  Users2,
+  Calendar,
+  Megaphone,
+} from "lucide-react";
+import logoImage from "@/assets/ner.jpeg";
+import { LogoutButton } from "@/components/auth/logout-button";
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+export default async function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!user) redirect('/login')
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
 
-  const isAdmin = ['system_admin', 'division_leader', 'team_leader', 'secretary', 'service_admin'].includes(profile?.role || '')
-  const canAccessMembers = ['system_admin', 'division_leader', 'team_leader', 'service_admin'].includes(profile?.role || '')
-  const canAccessTeams = ['system_admin', 'division_leader', 'team_leader', 'secretary', 'service_admin'].includes(profile?.role || '')
+  const isAdmin = [
+    "system_admin",
+    "division_leader",
+    "team_leader",
+    "secretary",
+    "service_admin",
+  ].includes(profile?.role || "");
+  const canAccessMembers = [
+    "system_admin",
+    "division_leader",
+    "team_leader",
+    "service_admin",
+  ].includes(profile?.role || "");
+  const canAccessTeams = [
+    "system_admin",
+    "division_leader",
+    "team_leader",
+    "secretary",
+    "service_admin",
+  ].includes(profile?.role || "");
 
-  if (!isAdmin) redirect('/')
+  if (!isAdmin) redirect("/");
 
   const navItems = [
-    { href: '/admin', label: '대시보드', icon: LayoutDashboard },
-    ...(canAccessTeams ? [{ href: '/admin/teams', label: '팀 관리', icon: Users2 }] : []),
-    ...(canAccessMembers ? [{ href: '/admin/members', label: '팀원 관리', icon: Users }] : []),
-    { href: '/admin/notices', label: '공지사항', icon: Megaphone },
-    { href: '/admin/services', label: '예배 스케줄 관리', icon: Calendar },
-  ]
+    { href: "/admin", label: "대시보드", icon: LayoutDashboard },
+    ...(canAccessTeams
+      ? [{ href: "/admin/teams", label: "팀 관리", icon: Users2 }]
+      : []),
+    ...(canAccessMembers
+      ? [{ href: "/admin/members", label: "팀원 관리", icon: Users }]
+      : []),
+    { href: "/admin/notices", label: "공지사항", icon: Megaphone },
+    { href: "/admin/services", label: "예배 스케줄 관리", icon: Calendar },
+  ];
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -38,14 +71,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="p-6 border-b border-slate-200">
           <div className="flex items-center gap-3">
             <div className="h-9 w-24 overflow-hidden rounded-lg border border-slate-200 bg-white p-1">
-              <Image src={logoImage} alt="NER Worship 로고" className="h-full w-full object-contain" />
+              <Image
+                src={logoImage}
+                alt="NER Worship 로고"
+                className="h-full w-full object-contain"
+              />
             </div>
-            <h2 className="text-xl font-bold">Admin Panel</h2>
+            <h2 className="text-xl font-bold">관리 페이지</h2>
           </div>
         </div>
         <nav className="flex-1 p-4 space-y-2">
           {navItems.map((item) => {
-            const Icon = item.icon
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
@@ -54,7 +91,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               >
                 <Icon className="w-4 h-4" /> {item.label}
               </Link>
-            )
+            );
           })}
         </nav>
         <div className="border-t border-slate-200 p-4">
@@ -73,11 +110,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-20 overflow-hidden rounded-lg border border-slate-200 bg-white p-1">
-                  <Image src={logoImage} alt="NER Worship 로고" className="h-full w-full object-contain" />
+                  <Image
+                    src={logoImage}
+                    alt="NER Worship 로고"
+                    className="h-full w-full object-contain"
+                  />
                 </div>
                 <h2 className="text-lg font-bold">Admin Panel</h2>
               </div>
-              <Link href="/" className="text-xs font-medium text-blue-600 hover:underline">
+              <Link
+                href="/"
+                className="text-xs font-medium text-blue-600 hover:underline"
+              >
                 메인으로
               </Link>
             </div>
@@ -86,7 +130,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
             <nav className="-mx-1 mt-3 flex gap-2 overflow-x-auto pb-1">
               {navItems.map((item) => {
-                const Icon = item.icon
+                const Icon = item.icon;
                 return (
                   <Link
                     key={item.href}
@@ -96,7 +140,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                     <Icon className="h-3.5 w-3.5" />
                     {item.label}
                   </Link>
-                )
+                );
               })}
             </nav>
           </div>
@@ -107,5 +151,5 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </main>
       </div>
     </div>
-  )
+  );
 }

@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { addMonths, endOfMonth, format as formatDate, startOfMonth } from "date-fns";
-import { CalendarDays, Users, Settings, UserCheck, Megaphone } from "lucide-react";
+import { CalendarDays, Settings, UserCheck, Megaphone } from "lucide-react";
 import { buildYoutubeQueueUrl, extractYouTubeVideoIds } from "@/lib/youtube";
 import {
   MonthlyAvailabilityVoteCard,
@@ -16,6 +16,7 @@ import {
 import logoImage from "@/assets/ner.jpeg";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { ServiceResourceLikeButton } from "@/components/resources/service-resource-like-button";
+import { MobileMonthlyWorshipCalendar } from "@/components/dashboard/mobile-monthly-worship-calendar";
 
 interface ServiceRef {
   id: string;
@@ -42,6 +43,7 @@ interface AssignmentDisplay {
   service: ServiceRef;
   team: TeamRef;
   resource: ServiceResource | null;
+  resourceEditorName: string | null;
   likeCount: number;
   likedByMe: boolean;
 }
@@ -53,7 +55,9 @@ interface TeamMembershipRow {
 interface ServiceResource {
   service_id: string;
   setlist_urls: string[] | null;
+  setlist_titles: string[] | null;
   meditation: string | null;
+  updated_by: string | null;
 }
 
 interface ServiceResourceLike {
@@ -135,6 +139,7 @@ export default async function DashboardPage() {
     new Set(myAssignmentsBase.map((item) => item.service.id)),
   );
   const serviceResourceMap = new Map<string, ServiceResource>();
+  const resourceEditorNameById = new Map<string, string>();
   const serviceLikeCountMap = new Map<string, number>();
   const likedServiceIds = new Set<string>();
 
@@ -142,7 +147,7 @@ export default async function DashboardPage() {
     const [resourcesRes, likesRes] = await Promise.all([
       supabase
         .from("service_resources")
-        .select("service_id, setlist_urls, meditation")
+        .select("service_id, setlist_urls, setlist_titles, meditation, updated_by")
         .in("service_id", serviceIds),
       supabase
         .from("service_resource_likes")
@@ -150,8 +155,33 @@ export default async function DashboardPage() {
         .in("service_id", serviceIds),
     ]);
 
-    for (const row of (resourcesRes.data || []) as ServiceResource[]) {
+    const resources = (resourcesRes.data || []) as ServiceResource[];
+    for (const row of resources) {
       serviceResourceMap.set(row.service_id, row);
+    }
+
+    const resourceEditorIds = Array.from(
+      new Set(
+        resources
+          .map((row) => row.updated_by)
+          .filter((editorId): editorId is string => Boolean(editorId)),
+      ),
+    );
+
+    if (resourceEditorIds.length > 0) {
+      const resourceEditorsRes = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", resourceEditorIds);
+
+      if (!resourceEditorsRes.error) {
+        for (const row of (resourceEditorsRes.data || []) as {
+          id: string;
+          full_name: string;
+        }[]) {
+          resourceEditorNameById.set(row.id, row.full_name);
+        }
+      }
     }
 
     if (!likesRes.error) {
@@ -168,6 +198,12 @@ export default async function DashboardPage() {
   const myAssignments: AssignmentDisplay[] = myAssignmentsBase.map((item) => ({
     ...item,
     resource: serviceResourceMap.get(item.service.id) || null,
+    resourceEditorName:
+      (() => {
+        const editorId = serviceResourceMap.get(item.service.id)?.updated_by;
+        if (!editorId) return null;
+        return resourceEditorNameById.get(editorId) || null;
+      })(),
     likeCount: serviceLikeCountMap.get(item.service.id) || 0,
     likedByMe: likedServiceIds.has(item.service.id),
   }));
@@ -271,6 +307,12 @@ export default async function DashboardPage() {
       );
     }) || null;
 
+  const getSetlistTitles = (assignment: AssignmentDisplay): string[] => {
+    const urls = assignment.resource?.setlist_urls || [];
+    const titles = assignment.resource?.setlist_titles || [];
+    return urls.map((_, index) => titles[index]?.trim() || `곡 ${index + 1}`);
+  };
+
   let teamNoticesRows: TeamNoticeRow[] = [];
   const noticesRes = await supabase
     .from("team_notices")
@@ -322,6 +364,10 @@ export default async function DashboardPage() {
     if (profile?.role === "service_admin") return "시스템 관리자";
     return "팀원";
   })();
+  const myTeamsLabel =
+    myTeams.length > 0
+      ? myTeams.map((team) => team.name).join(", ")
+      : "소속 팀 없음";
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -337,13 +383,15 @@ export default async function DashboardPage() {
                 />
               </div>
               <div className="min-w-0">
-                <h3 className="text-2xl font-bold tracking-tight">dashboard</h3>
                 <p className="mt-1 text-slate-500">
                   {profile?.full_name}{" "}
                   <span className="font-semibold text-blue-600">
                     {profileRoleLabel}
                   </span>
                   님, 환영합니다.
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  소속 팀: <span className="font-medium text-slate-700">{myTeamsLabel}</span>
                 </p>
               </div>
             </div>
@@ -412,30 +460,6 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center space-x-2 border-b pb-3">
-              <Users className="h-5 w-5 text-green-500" />
-              <CardTitle className="text-lg">내 소속 팀</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 pt-4">
-              {myTeams.length > 0 ? (
-                myTeams.map((team) => (
-                  <div
-                    key={team.id}
-                    className="flex items-center gap-2 rounded p-2 hover:bg-slate-50"
-                  >
-                    <div className="h-2 w-2 rounded-full bg-green-500" />
-                    <span className="text-sm font-medium">{team.name}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="py-4 text-center text-sm text-slate-500">
-                  아직 소속된 팀이 없습니다.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
           <Card className="border-purple-100">
             <CardHeader className="flex flex-row items-center space-x-2 border-b pb-3">
               <UserCheck className="h-5 w-5 text-purple-500" />
@@ -471,8 +495,25 @@ export default async function DashboardPage() {
                       </a>
                     );
                   })()}
+                  {(() => {
+                    const titles = getSetlistTitles(myNextSetlistAssignment);
+                    if (titles.length === 0) return null;
+                    return (
+                      <div className="rounded-md border bg-white p-2">
+                        <p className="text-[11px] font-semibold text-slate-500">콘티 곡</p>
+                        <ul className="mt-1 space-y-1 text-xs text-slate-700">
+                          {titles.map((title, idx) => (
+                            <li key={`mobile-setlist-title-${idx}`}>{idx + 1}. {title}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
                   <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs font-semibold text-slate-500">묵상</p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      등록자: {myNextSetlistAssignment.resourceEditorName || "미기록"}
+                    </p>
                     <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-7 text-slate-700">
                       {myNextSetlistAssignment.resource?.meditation?.trim() ||
                         "등록된 묵상이 없습니다."}
@@ -533,49 +574,12 @@ export default async function DashboardPage() {
               <CardTitle className="text-base">전체 예배 일정 현황</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-700">{currentMonthLabel}</p>
-                <p className="text-xs text-slate-500">공개 일정 {monthServices.length}개</p>
-              </div>
-              <div className="grid grid-cols-7 gap-1">
-                {weekDays.map((label) => (
-                  <div
-                    key={`mobile-week-${label}`}
-                    className="pb-1 text-center text-[11px] font-semibold text-slate-500"
-                  >
-                    {label}
-                  </div>
-                ))}
-                {monthCalendarCells.map((cell) => (
-                  <div
-                    key={`mobile-${cell.key}`}
-                    className={`min-h-20 rounded-md border p-1 ${
-                      cell.day === null
-                        ? "border-dashed border-slate-200 bg-slate-50"
-                        : "border-slate-200 bg-white"
-                    }`}
-                  >
-                    {cell.day !== null && (
-                      <>
-                        <p className="text-[11px] font-semibold text-slate-700">{cell.day}</p>
-                        <div className="mt-1 space-y-1">
-                          {cell.services.slice(0, 2).map((service) => (
-                            <div
-                              key={`mobile-service-${service.id}`}
-                              className="truncate rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-700"
-                            >
-                              {service.title}
-                            </div>
-                          ))}
-                          {cell.services.length > 2 && (
-                            <p className="text-[10px] text-slate-500">+{cell.services.length - 2}</p>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <MobileMonthlyWorshipCalendar
+                monthLabel={currentMonthLabel}
+                totalServices={monthServices.length}
+                weekDays={weekDays}
+                cells={monthCalendarCells}
+              />
             </CardContent>
           </Card>
         </div>
@@ -593,13 +597,15 @@ export default async function DashboardPage() {
                 />
               </div>
               <div>
-                <h3 className="text-2xl font-bold tracking-tight">dashboard</h3>
                 <p className="mt-1 text-slate-500">
                   {profile?.full_name}{" "}
                   <span className="font-semibold text-blue-600">
                     {profileRoleLabel}
                   </span>
                   님, 환영합니다.
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  소속 팀: <span className="font-medium text-slate-700">{myTeamsLabel}</span>
                 </p>
               </div>
             </div>
@@ -670,29 +676,6 @@ export default async function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <Card className="transition-shadow hover:shadow-md">
-                <CardHeader className="flex flex-row items-center space-x-2 border-b pb-3">
-                  <Users className="h-5 w-5 text-green-500" />
-                  <CardTitle className="text-lg">내 소속 팀</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 pt-4">
-                  {myTeams.length > 0 ? (
-                    myTeams.map((team) => (
-                      <div
-                        key={team.id}
-                        className="flex items-center gap-2 rounded p-2 hover:bg-slate-50"
-                      >
-                        <div className="h-2 w-2 rounded-full bg-green-500" />
-                        <span className="text-sm font-medium">{team.name}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="py-4 text-center text-sm text-slate-500">
-                      아직 소속된 팀이 없습니다.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
             </div>
 
             <div className="space-y-6">
@@ -731,8 +714,25 @@ export default async function DashboardPage() {
                           </a>
                         );
                       })()}
+                      {(() => {
+                        const titles = getSetlistTitles(myNextSetlistAssignment);
+                        if (titles.length === 0) return null;
+                        return (
+                          <div className="rounded-md border bg-white p-2">
+                            <p className="text-[11px] font-semibold text-slate-500">콘티 곡</p>
+                            <ul className="mt-1 space-y-1 text-xs text-slate-700">
+                              {titles.map((title, idx) => (
+                                <li key={`desktop-setlist-title-${idx}`}>{idx + 1}. {title}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })()}
                       <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-3">
                         <p className="text-xs font-semibold text-slate-500">묵상</p>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          등록자: {myNextSetlistAssignment.resourceEditorName || "미기록"}
+                        </p>
                         <p className="mt-1 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words pr-1 text-sm leading-7 text-slate-700">
                           {myNextSetlistAssignment.resource?.meditation?.trim() ||
                             "등록된 묵상이 없습니다."}
