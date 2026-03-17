@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { addMonths, compareAsc, endOfMonth, format, isSameMonth, parseISO, startOfMonth } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 interface Service {
   id: string
@@ -54,6 +56,10 @@ export default function AdminPage() {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()))
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [selectedDate, setSelectedDate] = useState('')
+  const [newServiceTitle, setNewServiceTitle] = useState('')
+  const [creatingService, setCreatingService] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -190,6 +196,49 @@ export default function AdminPage() {
 
   const weekDays = ['일', '월', '화', '수', '목', '금', '토']
 
+  const handleOpenCreateDialog = (day: number) => {
+    const nextDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day)
+    const dateValue = format(nextDate, 'yyyy-MM-dd')
+    const defaultTitle = `${format(nextDate, 'M월 d일', { locale: ko })} 예배`
+
+    setSelectedDate(dateValue)
+    setNewServiceTitle(defaultTitle)
+    setCreateDialogOpen(true)
+  }
+
+  const handleCreateServiceFromCalendar = async () => {
+    const title = newServiceTitle.trim()
+    if (!title || !selectedDate) {
+      toast.warning('예배 날짜와 명칭을 모두 입력해 주세요.')
+      return
+    }
+
+    setCreatingService(true)
+    const { data, error } = await supabase
+      .from('services')
+      .insert({
+        title,
+        date: selectedDate,
+        status: 'published',
+      })
+      .select('id, title, date, status')
+      .single()
+
+    if (error) {
+      toast.error('일정 생성 실패: ' + error.message)
+      setCreatingService(false)
+      return
+    }
+
+    toast.success('일정이 생성되었습니다.')
+    setServices((prev) =>
+      [...prev, data as Service].sort((a, b) => compareAsc(parseISO(b.date), parseISO(a.date)))
+    )
+    setCurrentMonth(startOfMonth(parseISO(selectedDate)))
+    setCreateDialogOpen(false)
+    setCreatingService(false)
+  }
+
   if (loading) {
     return <div className="p-20 text-center text-slate-500">대시보드 데이터를 불러오는 중...</div>
   }
@@ -274,12 +323,15 @@ export default function AdminPage() {
         </Card>
       </div>
 
-      <Card className="hidden md:block">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-base">월간 캘린더</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-base">월간 캘린더</CardTitle>
+            <span className="text-xs text-slate-500">일자를 눌러 일정을 등록하세요</span>
+          </div>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="mb-2 grid grid-cols-7 gap-2">
+          <div className="mb-2 grid grid-cols-7 gap-1.5 md:gap-2">
             {weekDays.map((day) => (
               <div key={day} className="py-2 text-center text-xs font-semibold text-slate-500">
                 {day}
@@ -287,15 +339,31 @@ export default function AdminPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 gap-1.5 md:gap-2">
             {calendarCells.map((day, index) => (
               <div
                 key={`${day ?? 'empty'}-${index}`}
-                className={`min-h-28 rounded-lg border p-2 ${day ? 'bg-white' : 'border-dashed bg-slate-50'}`}
+                className={`min-h-24 rounded-lg border p-2 md:min-h-28 ${day ? 'bg-white' : 'border-dashed bg-slate-50'}`}
               >
                 {day && (
                   <>
-                    <p className="mb-1 text-xs font-semibold text-slate-600">{day}일</p>
+                    <div className="mb-1 flex items-center justify-between gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCreateDialog(day)}
+                        className="rounded px-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                      >
+                        {day}일
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCreateDialog(day)}
+                        className="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-200 text-slate-500 hover:bg-slate-100"
+                        aria-label={`${day}일 일정 등록`}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </button>
+                    </div>
                     <div className="space-y-1">
                       {(birthdaysByDay.get(day) || []).map((profile) => (
                         <div key={`birthday-${profile.id}`} className="rounded border border-pink-200 bg-pink-50 px-2 py-1 text-[11px] text-pink-700">
@@ -336,6 +404,43 @@ export default function AdminPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>일정 등록</DialogTitle>
+            <DialogDescription>
+              {selectedDate ? `${selectedDate} 일정 정보를 입력해 주세요.` : '일정을 등록합니다.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <p className="mb-1 text-xs font-semibold text-slate-500">날짜</p>
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-semibold text-slate-500">예배 명칭</p>
+              <Input
+                value={newServiceTitle}
+                onChange={(event) => setNewServiceTitle(event.target.value)}
+                placeholder="예: 5부 예배"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+              취소
+            </Button>
+            <Button onClick={() => void handleCreateServiceFromCalendar()} disabled={creatingService}>
+              {creatingService ? '등록 중...' : '등록'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>
@@ -380,10 +485,12 @@ export default function AdminPage() {
               </div>
 
               <div className="hidden overflow-x-auto rounded-lg border bg-white md:block">
-                <table className="min-w-full text-left text-sm">
+                <table className="min-w-max text-left text-sm">
                   <thead className="border-b bg-slate-50">
                     <tr>
-                      <th className="w-40 px-4 py-3 text-xs font-semibold uppercase text-slate-500">팀</th>
+                      <th className="min-w-32 whitespace-nowrap break-keep px-4 py-3 text-xs font-semibold uppercase text-slate-500">
+                        팀
+                      </th>
                       {servicesInMonth.map((service) => (
                         <th key={service.id} className="min-w-52 px-4 py-3 align-top">
                           <Link href={`/admin/services/${service.id}`} className="hover:underline">
@@ -397,7 +504,9 @@ export default function AdminPage() {
                   <tbody>
                     {teams.map((team) => (
                       <tr key={team.id} className="border-b align-top last:border-b-0">
-                        <td className="px-4 py-3 font-semibold text-slate-700">{team.name}</td>
+                        <td className="whitespace-nowrap break-keep px-4 py-3 font-semibold text-slate-700">
+                          {team.name}
+                        </td>
                         {servicesInMonth.map((service) => {
                           const key = `${team.id}__${service.id}`
                           const cellAssignments = assignmentsByTeamService.get(key) || []

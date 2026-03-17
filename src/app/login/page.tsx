@@ -1,42 +1,59 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Image from 'next/image'
-import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
-import { toast } from 'sonner'
-import logoImage from '@/assets/ner.jpeg'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
+import { toast } from "sonner";
+import logoImage from "@/assets/ner.jpeg";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [isSignUp, setIsSignUp] = useState(false)
-  const [fullName, setFullName] = useState('')
-  const [showIntro, setShowIntro] = useState(false)
-  const router = useRouter()
-  const supabase = createClient()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [introPhase, setIntroPhase] = useState<"playing" | "handoff" | "done">(
+    "playing",
+  );
+  const router = useRouter();
+  const supabase = createClient();
 
   useEffect(() => {
-    const introSeen = sessionStorage.getItem('ner_login_intro_seen') === '1'
-    if (introSeen) return
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (prefersReducedMotion) {
+      setIntroPhase("done");
+      return;
+    }
 
-    setShowIntro(true)
-    sessionStorage.setItem('ner_login_intro_seen', '1')
+    const handoffTimer = window.setTimeout(() => {
+      setIntroPhase("handoff");
+    }, 1300);
 
-    const timer = window.setTimeout(() => {
-      setShowIntro(false)
-    }, 1800)
+    const finishTimer = window.setTimeout(() => {
+      setIntroPhase("done");
+    }, 2300);
 
-    return () => window.clearTimeout(timer)
-  }, [])
+    return () => {
+      window.clearTimeout(handoffTimer);
+      window.clearTimeout(finishTimer);
+    };
+  }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault();
+    setLoading(true);
 
     try {
       if (isSignUp) {
@@ -44,62 +61,83 @@ export default function LoginPage() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-        })
-        if (error) throw error
-        
+        });
+        if (error) throw error;
+
         // 프로필 생성
         if (data.user) {
           const { error: profileError } = await supabase
-            .from('profiles')
+            .from("profiles")
             .insert({
               id: data.user.id,
               full_name: fullName,
-              role: 'member' // 기본 역할
-            })
-          if (profileError) throw profileError
+              role: "member", // 기본 역할
+            });
+          if (profileError) throw profileError;
         }
-        toast.success('회원가입 성공! 이메일을 확인하세요.')
+        toast.success("회원가입 성공! 이메일을 확인하세요.");
       } else {
         // 로그인
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
-        })
-        if (error) throw error
-        toast.success('로그인 성공!')
-        router.push('/')
-        router.refresh()
+        });
+        if (error) throw error;
+        toast.success("로그인 성공!");
+        router.push("/");
+        router.refresh();
       }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '인증 처리 중 오류가 발생했습니다.'
-      toast.error(message)
+      const message =
+        error instanceof Error
+          ? error.message
+          : "인증 처리 중 오류가 발생했습니다.";
+      toast.error(message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 p-4">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(30,64,175,0.08),transparent_45%),radial-gradient(circle_at_80%_80%,rgba(15,23,42,0.08),transparent_45%)]" />
-      {showIntro && (
-        <div className="login-intro-overlay" aria-hidden>
+      {introPhase !== "done" && (
+        <div
+          className={`login-intro-overlay ${introPhase === "handoff" ? "is-handoff" : ""}`}
+          aria-hidden
+        >
           <div className="login-intro-grid" />
           <div className="login-intro-title-wrap">
-            <p className="login-intro-title">ner worship</p>
+            <p className="login-intro-title">
+              <span className="login-intro-hebrew">Ner</span>
+              <span className="login-intro-word">worship</span>
+            </p>
           </div>
           <span className="login-intro-ember" />
+          <span className="login-intro-spark s1" />
+          <span className="login-intro-spark s2" />
+          <span className="login-intro-spark s3" />
+          <span className="login-intro-spark s4" />
         </div>
       )}
-      <Card className="w-full max-w-md shadow-lg border-slate-200">
+      <Card className="w-full max-w-md border-slate-200 shadow-lg">
         <CardHeader className="space-y-1">
-          <div className="mx-auto mb-2 h-14 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1">
-            <Image src={logoImage} alt="NER Worship 로고" className="h-full w-full object-contain" />
+          <div
+            className={`login-logo-bridge mx-auto mb-2 h-14 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 ${introPhase !== "playing" ? "is-active" : ""}`}
+          >
+            <Image
+              src={logoImage}
+              alt="NER Worship 로고"
+              className="h-full w-full object-contain"
+            />
           </div>
           <CardTitle className="text-2xl font-bold text-center">
-            {isSignUp ? 'Worship Scheduler 가입' : '예배팀 로그인'}
+            {isSignUp ? "Worship Scheduler 가입" : "예배팀 로그인"}
           </CardTitle>
           <p className="text-sm text-center text-slate-500">
-            {isSignUp ? '새로운 팀원으로 등록하세요.' : '팀 일정을 확인하려면 로그인하세요.'}
+            {isSignUp
+              ? "새로운 팀원으로 등록하세요."
+              : "팀 일정을 확인하려면 로그인하세요."}
           </p>
         </CardHeader>
         <CardContent>
@@ -134,20 +172,22 @@ export default function LoginPage() {
               />
             </div>
             <Button className="w-full" type="submit" disabled={loading}>
-              {loading ? '처리 중...' : (isSignUp ? '가입하기' : '로그인')}
+              {loading ? "처리 중..." : isSignUp ? "가입하기" : "로그인"}
             </Button>
           </form>
         </CardContent>
         <CardFooter>
-          <Button 
-            variant="ghost" 
-            className="w-full text-xs" 
+          <Button
+            variant="ghost"
+            className="w-full text-xs"
             onClick={() => setIsSignUp(!isSignUp)}
           >
-            {isSignUp ? '이미 계정이 있나요? 로그인' : '계정이 없나요? 회원가입'}
+            {isSignUp
+              ? "이미 계정이 있나요? 로그인"
+              : "계정이 없나요? 회원가입"}
           </Button>
         </CardFooter>
       </Card>
     </div>
-  )
+  );
 }

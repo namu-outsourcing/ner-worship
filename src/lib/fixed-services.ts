@@ -114,7 +114,7 @@ export async function ensureFixedSundayServicesForMonth(
       missingDates.map((date) => ({
         date,
         title: FIXED_SERVICE_TITLE,
-        status: 'draft',
+        status: 'published',
       }))
     )
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { addMonths, compareAsc, format, isSameMonth, parseISO, startOfMonth } from 'date-fns'
+import { addMonths, compareAsc, endOfMonth, format, isSameMonth, parseISO, startOfMonth } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, GripVertical, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -26,6 +26,7 @@ interface Team {
 interface ProfileRef {
   id: string
   full_name: string
+  birthday: string | null
 }
 
 interface TeamMember {
@@ -85,7 +86,7 @@ export default function ServicesAdminPage() {
       const [servicesRes, teamsRes, profilesRes, teamMembersRes, assignmentsRes, availabilityVotesRes] = await Promise.all([
         supabase.from('services').select('id, title, date, status').order('date', { ascending: false }),
         supabase.from('teams').select('id, name').order('name', { ascending: true }),
-        supabase.from('profiles').select('id, full_name').order('full_name', { ascending: true }),
+        supabase.from('profiles').select('id, full_name, birthday').order('full_name', { ascending: true }),
         supabase.from('team_members').select('team_id, profile_id'),
         supabase.from('assignments').select('id, service_id, team_id, profile_id, role_name'),
         supabase.from('availability_votes').select('id, service_id, team_id, profile_id, availability, note'),
@@ -193,6 +194,16 @@ export default function ServicesAdminPage() {
     return grouped
   }, [assignmentsInMonth])
 
+  const assignmentsByServiceId = useMemo(() => {
+    const grouped = new Map<string, AssignmentRow[]>()
+    assignmentsInMonth.forEach((assignment) => {
+      const list = grouped.get(assignment.service_id) || []
+      list.push(assignment)
+      grouped.set(assignment.service_id, list)
+    })
+    return grouped
+  }, [assignmentsInMonth])
+
   const activeTeamAssignments = useMemo(() => {
     if (!activeTeamId) return []
     return assignmentsInMonth.filter((assignment) => assignment.team_id === activeTeamId)
@@ -286,6 +297,58 @@ export default function ServicesAdminPage() {
     })
   }, [activeTeamMembers, monthlyCountByProfile])
 
+  const servicesByDay = useMemo(() => {
+    const grouped = new Map<number, Service[]>()
+    servicesInMonth.forEach((service) => {
+      const day = parseISO(service.date).getDate()
+      const list = grouped.get(day) || []
+      list.push(service)
+      grouped.set(day, list)
+    })
+    return grouped
+  }, [servicesInMonth])
+
+  const birthdaysByDay = useMemo(() => {
+    const grouped = new Map<number, ProfileRef[]>()
+    const monthIndex = currentMonth.getMonth()
+
+    profiles.forEach((profile) => {
+      if (!profile.birthday) return
+      const birthdayDate = parseISO(profile.birthday)
+      if (Number.isNaN(birthdayDate.getTime())) return
+      if (birthdayDate.getMonth() !== monthIndex) return
+
+      const day = birthdayDate.getDate()
+      const list = grouped.get(day) || []
+      list.push(profile)
+      grouped.set(day, list)
+    })
+
+    for (const [day, list] of grouped.entries()) {
+      list.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ko'))
+      grouped.set(day, list)
+    }
+
+    return grouped
+  }, [currentMonth, profiles])
+
+  const calendarCells = useMemo(() => {
+    const monthStart = startOfMonth(currentMonth)
+    const monthEnd = endOfMonth(currentMonth)
+    const leadingEmptyCells = monthStart.getDay()
+    const daysInMonth = monthEnd.getDate()
+    const totalCells = leadingEmptyCells + daysInMonth
+    const trailingEmptyCells = (7 - (totalCells % 7)) % 7
+
+    const cells: Array<number | null> = []
+    for (let i = 0; i < leadingEmptyCells; i++) cells.push(null)
+    for (let day = 1; day <= daysInMonth; day++) cells.push(day)
+    for (let i = 0; i < trailingEmptyCells; i++) cells.push(null)
+    return cells
+  }, [currentMonth])
+
+  const weekDays = ['일', '월', '화', '수', '목', '금', '토']
+
   useEffect(() => {
     if (activeTeamMembersSortedByLoad.length === 0) {
       if (mobileSelectedMemberId) setMobileSelectedMemberId('')
@@ -339,7 +402,7 @@ export default function ServicesAdminPage() {
       .insert({
         title,
         date: newService.date,
-        status: 'draft',
+        status: 'published',
       })
       .select('id, title, date, status')
       .single()
@@ -990,6 +1053,72 @@ export default function ServicesAdminPage() {
                 )}
               </CardContent>
             </Card>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">월간 캘린더</CardTitle>
+          <p className="text-sm text-slate-500">
+            현재 선택한 월 기준으로 전체 예배 일정과 생일을 확인할 수 있습니다.
+          </p>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="mb-2 grid grid-cols-7 gap-1.5 md:gap-2">
+            {weekDays.map((day) => (
+              <div key={day} className="py-2 text-center text-xs font-semibold text-slate-500">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1.5 md:gap-2">
+            {calendarCells.map((day, index) => (
+              <div
+                key={`${day ?? 'empty'}-${index}`}
+                className={`min-h-24 rounded-lg border p-2 md:min-h-28 ${day ? 'bg-white' : 'border-dashed bg-slate-50'}`}
+              >
+                {day && (
+                  <>
+                    <p className="mb-1 text-xs font-semibold text-slate-700">{day}일</p>
+                    <div className="space-y-1">
+                      {(birthdaysByDay.get(day) || []).map((profile) => (
+                        <div key={`birthday-${profile.id}`} className="rounded border border-pink-200 bg-pink-50 px-2 py-1 text-[11px] text-pink-700">
+                          🎂 {profile.full_name}
+                        </div>
+                      ))}
+
+                      {(servicesByDay.get(day) || []).map((service) => {
+                        const serviceAssignments = assignmentsByServiceId.get(service.id) || []
+                        const assignedTeams = new Set(serviceAssignments.map((assignment) => assignment.team_id)).size
+                        const unassignedTeams = Math.max(teams.length - assignedTeams, 0)
+
+                        return (
+                          <Link
+                            key={service.id}
+                            href={`/admin/services/${service.id}`}
+                            className="block rounded border bg-slate-50 px-2 py-1 text-[11px] hover:bg-blue-50"
+                          >
+                            <p className="line-clamp-1 font-medium">{service.title}</p>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700">
+                                {assignedTeams}/{teams.length}팀
+                              </span>
+                              {unassignedTeams > 0 && (
+                                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
+                                  미배정 {unassignedTeams}
+                                </span>
+                              )}
+                            </div>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

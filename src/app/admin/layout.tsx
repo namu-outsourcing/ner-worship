@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { LayoutDashboard, Users, Users2, Calendar } from 'lucide-react'
+import { LayoutDashboard, Users, Users2, Calendar, Megaphone } from 'lucide-react'
 import logoImage from '@/assets/ner.jpeg'
 import { LogoutButton } from '@/components/auth/logout-button'
 
@@ -28,6 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: '/admin', label: '대시보드', icon: LayoutDashboard },
     ...(canAccessTeams ? [{ href: '/admin/teams', label: '팀 관리', icon: Users2 }] : []),
     ...(canAccessMembers ? [{ href: '/admin/members', label: '팀원 관리', icon: Users }] : []),
+    { href: '/admin/notices', label: '공지사항', icon: Megaphone },
     { href: '/admin/services', label: '예배 스케줄 관리', icon: Calendar },
   ]
 
